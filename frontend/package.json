@@ -1,0 +1,13 @@
+{
+  "name": "vedansh-birthday-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive jungle-safari 1st birthday site for Vedansh Arya (frontend).",
+  "scripts": {
+    "dev": "serve -l 5173 .",
+    "start": "serve -l 5173 ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}

@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: birthday-postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: birthday
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: birthday-api
+
+    depends_on:
+      - postgres
+
+    restart: unless-stopped
+
+    ports:
+      - "3001:3001"
+
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/birthday?schema=public
+      PORT: 3001
+
+volumes:
+  postgres-data:
