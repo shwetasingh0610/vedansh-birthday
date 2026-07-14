@@ -1,11 +1,31 @@
 import { getWishes, addWish } from './api.js';
 import { burst } from './confetti.js';
 
-// Shown when the backend is not reachable yet (e.g. before deployment).
+// Instant fallback shown before anything is cached (first-ever visit).
 const SEED = [
-  { name: 'Nani & Nana', message: 'Our little tiger, you fill our world with roars of joy!' },
-  { name: 'The Sharmas', message: 'Happy 1st birthday, brave explorer! 🎂' },
+  { name: 'Papa', message: 'Happy First Birthday to my little bundle of joy' },
+  { name: 'Momy', message: 'happiest birthday my betu mumma loves you'},
 ];
+
+const CACHE_KEY = 'vedansh:wishes:v1';
+
+// ---- tiny localStorage cache (safe if storage is unavailable) ----
+const readCache = () => {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    const list = raw ? JSON.parse(raw) : null;
+    return Array.isArray(list) && list.length ? list : null;
+  } catch {
+    return null;
+  }
+};
+const writeCache = (list) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(list.slice(0, 100)));
+  } catch {
+    /* ignore quota / private-mode errors */
+  }
+};
 
 export function initWishes() {
   const wall = document.getElementById('wall');
@@ -15,6 +35,13 @@ export function initWishes() {
   if (!wall || !btn) return;
 
   let online = false;
+
+  // small "syncing…" pill so the background refresh is visible but unobtrusive
+  const sync = document.createElement('div');
+  sync.className = 'wishes-sync';
+  sync.textContent = 'Syncing wishes…';
+  wall.parentNode.insertBefore(sync, wall);
+  const showSync = (on) => { sync.style.display = on ? 'inline-flex' : 'none'; };
 
   const noteEl = (name, message) => {
     const n = document.createElement('div');
@@ -33,45 +60,48 @@ export function initWishes() {
     wall.innerHTML = '';
     list.forEach((w) => wall.appendChild(noteEl(w.name, w.message)));
   };
-
   const prepend = (name, message) => wall.prepend(noteEl(name, message));
 
-  async function load() {
+  // 1) Paint immediately from cache (or seed) — the wall is never empty.
+  render(readCache() || SEED);
+
+  // 2) Revalidate from the backend in the background; update when it arrives.
+  (async function refresh() {
+    showSync(true);
     try {
       const list = await getWishes();
       online = true;
-      render(list.length ? list : SEED);
+      if (list.length) {
+        render(list);
+        writeCache(list);
+      }
     } catch {
-      online = false; // graceful demo mode until the API is live
-      render(SEED);
+      online = false; // backend still waking / unreachable — keep what's shown
+    } finally {
+      showSync(false);
     }
-  }
+  })();
 
+  // 3) Adding a wish is optimistic: show it instantly, save to backend in the bg.
   btn.addEventListener('click', async () => {
     const message = msgEl.value.trim();
     const name = nameEl.value.trim();
     if (!message) { msgEl.focus(); return; }
 
-    btn.disabled = true;
+    prepend(name, message);       // instant feedback
+    nameEl.value = '';
+    msgEl.value = '';
+    burst();
+
     try {
-      if (online) {
-        const saved = await addWish({ name, message });
-        prepend(saved.name, saved.message);
-      } else {
-        prepend(name, message); // local-only until backend is connected
-      }
-      nameEl.value = '';
-      msgEl.value = '';
-      burst();
+      if (online) await addWish({ name, message });
+      // refresh the cache so the new wish survives a reload
+      try {
+        const list = await getWishes();
+        if (list.length) { render(list); writeCache(list); }
+      } catch { /* keep optimistic copy */ }
     } catch {
-      prepend(name, message); // never lose the guest's words
-      nameEl.value = '';
-      msgEl.value = '';
-      burst();
-    } finally {
-      btn.disabled = false;
+      /* guest's words already shown; nothing lost */
     }
   });
-
-  load();
 }
